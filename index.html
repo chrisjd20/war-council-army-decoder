@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta name="google-site-verification" content="pi9ySQ71HunPcIRhFypBT7i3DDrOX3X-9jjL1p5xneQ" />
+    <title>Asoiaf Protobuf Decoder</title>
+</head>
+
+<body>
+    <!-- Input Form -->
+    <form id="decoderForm">
+        <input type="text" id="inputString" placeholder="Enter War Council Exported Army Base64 Encoded String"
+            value="EglWaWN0YXJpb24YCCAoKABaAwi4VFoHCLdUEMOiAVoDCLFUWgMIslRaCwi0VBDCogEQyaIBYNPwAWDU8AFgw+0B">
+        <button type="submit">Decode</button>
+    </form>
+
+    <!-- Display Decoded Result -->
+    <pre id="decodedResult"></pre>
+</body>
+<script src="static/jsbi-umd.js"></script>
+<script src="static/hexUtils.js"></script>
+<script src="static/protobufDecoder.js"></script>
+<script>
+    function decodeArmyFromBase64EncodedString(b64_string) {
+        var decoded_army_list = decodeProto(parseInput(b64_string));
+        for (var i = 0; i < decoded_army_list.parts.length; i++) {
+            if (i !== 0 && decoded_army_list.parts[i].value instanceof Uint8Array) {
+                decoded_army_list.parts[i].value = decodeProto(decoded_army_list.parts[i].value);
+            }
+        }
+        // Index 0's .value appears to always be the army name, and is a string
+        var decoder = new TextDecoder();
+        decoded_army_list.parts[0].value = decoder.decode(decoded_army_list.parts[0].value);
+        decoded_army_list.parts[0].type = 0
+        // Index 1's .value appears to always be the army faction, and is encoded as a string number
+        /*
+        .value string values for each Army
+        "1" - Lanister
+        "2" - Stark
+        "3" - Free Folk
+        "4" - Neutral
+        "5" - Night's Watch
+        "6" - Baratheon
+        "7" - Targaryen
+        "8" - Greyjoy
+        "9" - Martell
+        "10" - Bolton
+        */
+        // Index 2's .value appears to always be the army points, and as a string number
+        // Not sure what index 3 is, but it's always a string number and always "0" so far from my testing
+        console.log(decoded_army_list)
+        return decoded_army_list;
+    }
+    var armyTranslationTable = {
+        "1": "Lanister",
+        "2": "Stark",
+        "3": "Free Folk",
+        "4": "Neutral",
+        "5": "Night's Watch",
+        "6": "Baratheon",
+        "7": "Targaryen",
+        "8": "Greyjoy",
+        "9": "Martell",
+        "10": "Bolton"
+    };
+    function makeHumanReadableArmy(protoBuffArmy) {
+        var armyJson = {}
+        armyJson.name = protoBuffArmy.parts[0].value;
+        armyJson.faction = armyTranslationTable[protoBuffArmy.parts[1].value];
+        armyJson.points_limit = protoBuffArmy.parts[2].value;
+        armyJson.units = [];
+        armyJson.ncus = [];
+        armyJson.specials = [];
+        for (var i = 0; i < protoBuffArmy.parts.length; i++) {
+            if (i >= 0 && i <= 3) { continue }
+            if (protoBuffArmy.parts[i].value.hasOwnProperty("parts")) {
+                var unit_with_with_attachments = {
+                    "unitId": "",
+                    "attachments": []
+                };
+                for (var j = 0; j < protoBuffArmy.parts[i].value.parts.length; j++) {
+                    if (j === 0) {
+                        unit_with_with_attachments.unitId = protoBuffArmy.parts[i].value.parts[j].value;
+                    } else {
+                        unit_with_with_attachments.attachments.push(protoBuffArmy.parts[i].value.parts[j].value);
+                    }
+                }
+                armyJson.units.push(unit_with_with_attachments);
+            } else if (protoBuffArmy.parts[i].value[0] === "2") {
+                armyJson.specials.push(protoBuffArmy.parts[i].value);
+            } else {
+                armyJson.ncus.push(protoBuffArmy.parts[i].value);
+            }
+        }
+        return armyJson
+    }
+
+    document.addEventListener("DOMContentLoaded", function () {
+        var form = document.getElementById('decoderForm');
+        form.onsubmit = function (event) {
+            event.preventDefault();
+            var inputString = document.getElementById('inputString').value;
+            var protoBuffArmy = decodeArmyFromBase64EncodedString(inputString);
+            var humanReadableArmy = makeHumanReadableArmy(protoBuffArmy)
+            document.getElementById('decodedResult').textContent = JSON.stringify(humanReadableArmy, null, 2);
+        };
+    });
+</script>
+
+</html>
